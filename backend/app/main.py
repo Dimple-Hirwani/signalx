@@ -8,6 +8,7 @@ from app.database import engine
 from app.seed import main as seed_db
 from app.routers.auth import router as auth_router
 from app.routers.conversation import router as conversation_router
+from app.websocket.router import router as ws_router
 
 import app.models  # noqa: F401
 
@@ -28,6 +29,7 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(conversation_router)
+app.include_router(ws_router)
 
 app.add_middleware(
     CORSMiddleware,
