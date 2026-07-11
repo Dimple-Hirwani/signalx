@@ -1,35 +1,38 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { authApi } from "@/lib/api";
-import { useAuthStore } from "@/store/auth";
+import { Sidebar } from "@/components/sidebar/Sidebar";
 
 export default function ChatPage() {
-  const { user, token, clearAuth } = useAuthStore();
-  const router = useRouter();
-
-  async function handleLogout() {
-    if (token) {
-      await authApi.logout(token).catch(() => {});
-    }
-    clearAuth();
-    router.replace("/login");
-  }
-
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
-      <div className="rounded-xl border border-border bg-card p-8 text-center shadow-sm">
-        <p className="text-lg font-semibold text-foreground">
-          Welcome, {user?.display_name} 👋
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">{user?.phone}</p>
-        <button
-          onClick={handleLogout}
-          className="mt-6 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:opacity-90 transition-opacity"
-        >
-          Log out
-        </button>
-      </div>
+    <div className="flex h-screen bg-background overflow-hidden">
+      <Sidebar />
+
+      {/* Main panel */}
+      <main className="flex-1 flex flex-col items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 text-center px-8">
+          <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center">
+            <svg
+              className="h-10 w-10 text-muted-foreground"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xl font-semibold text-foreground">Select a conversation</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Choose from your existing conversations on the left
+            </p>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
