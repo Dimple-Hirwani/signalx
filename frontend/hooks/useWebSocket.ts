@@ -3,10 +3,13 @@
 import { useEffect, useRef } from "react";
 import type { Message } from "@/types/message";
 
+// NEXT_PUBLIC_WS_URL is set on Render to wss://your-backend.onrender.com
+// Falls back to the current hostname on port 8000 for local development.
 const WS_BASE =
-  typeof window !== "undefined"
+  process.env.NEXT_PUBLIC_WS_URL ||
+  (typeof window !== "undefined"
     ? `ws://${window.location.hostname}:8000`
-    : "ws://localhost:8000";
+    : "ws://localhost:8000");
 
 interface ReceiptFrame {
   type: "receipt";
