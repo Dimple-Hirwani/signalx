@@ -125,3 +125,50 @@ async def get_conversations_for_user(
             )
         )
     return results
+
+
+async def get_members_for_conversation(
+    db: AsyncSession, conversation_id: str, requesting_user_id: str
+) -> list | None:
+    """
+    Return members of a conversation.
+    Returns None if the requesting user is not a member.
+    """
+    from app.models import User, ConversationMember
+    from app.schemas.conversation import MemberOut
+
+    # Verify requester is a member
+    check = await db.execute(
+        select(ConversationMember).where(
+            ConversationMember.conversation_id == conversation_id,
+            ConversationMember.user_id == requesting_user_id,
+        )
+    )
+    if check.scalars().first() is None:
+        return None
+
+    rows = await db.execute(
+        select(
+            ConversationMember.user_id,
+            ConversationMember.is_admin,
+            User.display_name,
+            User.avatar_url,
+            User.is_online,
+            User.last_seen_at,
+        )
+        .join(User, User.id == ConversationMember.user_id)
+        .where(ConversationMember.conversation_id == conversation_id)
+        .order_by(ConversationMember.is_admin.desc(), User.display_name.asc())
+    )
+
+    return [
+        MemberOut(
+            user_id=r.user_id,
+            display_name=r.display_name,
+            avatar_url=r.avatar_url,
+            is_admin=r.is_admin,
+            is_online=r.is_online,
+            last_seen_at=r.last_seen_at,
+        )
+        for r in rows.all()
+    ]

@@ -6,6 +6,9 @@ from app.middleware.auth import get_current_user
 from app.models import User
 from app.schemas.auth import LoginResponse, OTPRequest, PhoneRequest, ProfileUpdateRequest, UserOut
 from app.services.auth import logout, request_otp, verify_otp
+from fastapi import UploadFile, File
+import os, uuid as _uuid
+from app.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -54,3 +57,33 @@ async def logout_endpoint(
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.removeprefix("Bearer ").strip()
     await logout(db, token)
+
+
+@router.post("/avatar", response_model=UserOut)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload a profile picture. Accepts any image/* MIME type up to 5 MB."""
+    if not (file.content_type or "").startswith("image/"):
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=400, detail="File must be an image")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=413, detail="Image must be under 5 MB")
+
+    # Store in uploads/avatars/<uuid>.<ext>
+    avatars_dir = os.path.join(settings.upload_dir, "avatars")
+    os.makedirs(avatars_dir, exist_ok=True)
+    ext = (file.filename or "image.jpg").rsplit(".", 1)[-1].lower()
+    filename = f"{_uuid.uuid4()}.{ext}"
+    filepath = os.path.join(avatars_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    current_user.avatar_url = f"/static/uploads/avatars/{filename}"
+    await db.flush()
+    return UserOut.model_validate(current_user)

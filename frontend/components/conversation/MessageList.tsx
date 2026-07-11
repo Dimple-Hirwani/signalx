@@ -43,10 +43,16 @@ function SkeletonBubble({ own }: { own: boolean }) {
 
 export function MessageList({ messages, currentUserId, isGroup, isLoading, error }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom whenever messages change
+  // Auto-scroll to bottom only when user is already near the bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   if (isLoading) {
@@ -94,7 +100,7 @@ export function MessageList({ messages, currentUserId, isGroup, isLoading, error
   }
 
   return (
-    <div className="flex-1 overflow-y-auto py-2">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto py-2">
       {items.map((item, idx) =>
         item.type === "date" ? (
           <DateDivider key={`date-${idx}`} label={item.label} />

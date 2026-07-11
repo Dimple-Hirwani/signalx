@@ -21,4 +21,5 @@ export interface Message {
   reply_to: ReplySnippet | null;
   attachments: AttachmentOut[];
   created_at: string; // ISO datetime
+  receipt_status: "sending" | "sent" | "delivered" | "read";
 }

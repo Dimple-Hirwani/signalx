@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models import User
-from app.schemas.conversation import ConversationOut
+from app.schemas.conversation import ConversationOut, MemberOut
 from app.schemas.message import MessageOut, SendMessageRequest
 from app.services.conversation import list_conversations
 from app.services.message import create_message, list_messages
@@ -65,3 +65,19 @@ async def post_message(
     await manager.send_to_user(conversation_id, current_user.id, receipt_frame)
 
     return result
+
+
+@router.get("/{conversation_id}/members", response_model=list[MemberOut])
+async def get_members(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.repositories.conversation import get_members_for_conversation
+    members = await get_members_for_conversation(db, conversation_id, current_user.id)
+    if members is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this conversation",
+        )
+    return members

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConversationHeader } from "@/components/conversation/ConversationHeader";
 import { MessageList } from "@/components/conversation/MessageList";
@@ -7,6 +8,9 @@ import { MessageComposer } from "@/components/conversation/MessageComposer";
 import { useConversationStore } from "@/store/conversation";
 import { useAuthStore } from "@/store/auth";
 import { useMessages } from "@/hooks/useMessages";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { conversationApi } from "@/lib/api";
+import type { Message } from "@/types/message";
 
 function EmptyState() {
   return (
@@ -39,11 +43,46 @@ function EmptyState() {
 }
 
 function ConversationPanel() {
-  const { selectedId, conversations } = useConversationStore();
-  const user = useAuthStore((s) => s.user);
-  const { messages, isLoading, error } = useMessages(selectedId);
+  const { selectedId, conversations, updatePreview } = useConversationStore();
+  const { user, token } = useAuthStore();
+  const {
+    messages,
+    isLoading,
+    error,
+    addMessage,
+    replaceMessage,
+    removeMessage,
+    appendIncoming,
+    updateReceiptStatus,
+  } = useMessages(selectedId);
+
+  useWebSocket(
+    selectedId,
+    token,
+    useCallback(
+      (msg: Message) => {
+        appendIncoming(msg);
+        // Update sidebar preview for messages from other users
+        if (selectedId) {
+          updatePreview(selectedId, msg.content, msg.created_at);
+        }
+      },
+      [appendIncoming, selectedId, updatePreview]
+    ),
+    updateReceiptStatus
+  );
 
   const conversation = conversations.find((c) => c.id === selectedId);
+
+  const handleSendRequest = useCallback(
+    async (content: string): Promise<Message> => {
+      if (!token || !selectedId) throw new Error("Not connected");
+      const confirmed = await conversationApi.sendMessage(token, selectedId, content);
+      updatePreview(selectedId, confirmed.content, confirmed.created_at);
+      return confirmed;
+    },
+    [token, selectedId, updatePreview]
+  );
 
   if (!conversation || !user) return <EmptyState />;
 
@@ -57,7 +96,15 @@ function ConversationPanel() {
         isLoading={isLoading}
         error={error}
       />
-      <MessageComposer />
+      <MessageComposer
+        conversationId={conversation.id}
+        currentUserId={user.id}
+        currentUserName={user.display_name}
+        onOptimisticAdd={addMessage}
+        onConfirmed={replaceMessage}
+        onRollback={removeMessage}
+        onSendRequest={handleSendRequest}
+      />
     </div>
   );
 }
@@ -67,24 +114,16 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar: always visible on desktop, hidden on mobile when a chat is open */}
+      {/* Sidebar: full width on mobile when no chat open, fixed width on desktop */}
       <div
-        className={`
-          flex-shrink-0 w-80
-          ${selectedId ? "hidden md:flex" : "flex"}
-          flex-col
-        `}
+        className={`flex-shrink-0 w-80 flex-col ${selectedId ? "hidden md:flex" : "flex"}`}
       >
         <Sidebar />
       </div>
 
-      {/* Main panel: hidden on mobile when no chat selected */}
+      {/* Main panel */}
       <main
-        className={`
-          flex-1 min-w-0
-          ${selectedId ? "flex" : "hidden md:flex"}
-          flex-col
-        `}
+        className={`flex-1 min-w-0 flex-col ${selectedId ? "flex" : "hidden md:flex"}`}
       >
         <ConversationPanel />
       </main>
