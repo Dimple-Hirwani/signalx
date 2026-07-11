@@ -4,8 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine, Base
+from app.database import engine
 from app.seed import main as seed_db
+from app.routers.auth import router as auth_router
 
 import app.models  # noqa: F401
 
@@ -14,7 +15,6 @@ import app.models  # noqa: F401
 async def lifespan(app: FastAPI):
     await seed_db()
     yield
-    # Graceful shutdown — dispose the connection pool
     await engine.dispose()
 
 
@@ -24,6 +24,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,

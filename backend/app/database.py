@@ -34,8 +34,13 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def get_db() -> AsyncSession:
     """
-    FastAPI dependency that yields a database session and closes it after the
-    request completes.  Usage: db: AsyncSession = Depends(get_db)
+    FastAPI dependency that yields a database session, commits on success,
+    and rolls back on error.  Usage: db: AsyncSession = Depends(get_db)
     """
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
