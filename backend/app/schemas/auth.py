@@ -35,6 +35,23 @@ class OTPRequest(BaseModel):
         return v
 
 
+class ProfileUpdateRequest(BaseModel):
+    display_name: str | None = None
+    avatar_url: str | None = None
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Display name cannot be empty")
+        if len(v) > 64:
+            raise ValueError("Display name cannot exceed 64 characters")
+        return v
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

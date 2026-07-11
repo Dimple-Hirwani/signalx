@@ -41,3 +41,9 @@ class MessageOut(BaseModel):
     reply_to: ReplySnippet | None
     attachments: list[AttachmentOut]
     created_at: datetime
+    # Aggregate receipt status from the sender's perspective.
+    # "sending" is frontend-only (optimistic); backend never returns it.
+    # "sent"      → persisted, but at least one recipient has no receipt row
+    # "delivered" → all recipients have a receipt row (any status)
+    # "read"      → all recipients have status='read'
+    receipt_status: str  # "sent" | "delivered" | "read"

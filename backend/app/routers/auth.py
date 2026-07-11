@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models import User
-from app.schemas.auth import LoginResponse, OTPRequest, PhoneRequest, UserOut
+from app.schemas.auth import LoginResponse, OTPRequest, PhoneRequest, ProfileUpdateRequest, UserOut
 from app.services.auth import logout, request_otp, verify_otp
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -28,6 +28,20 @@ async def verify_otp_endpoint(body: OTPRequest, db: AsyncSession = Depends(get_d
 
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)):
+    return UserOut.model_validate(current_user)
+
+
+@router.patch("/profile", response_model=UserOut)
+async def update_profile(
+    body: ProfileUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if body.display_name is not None:
+        current_user.display_name = body.display_name
+    if body.avatar_url is not None:
+        current_user.avatar_url = body.avatar_url
+    await db.flush()
     return UserOut.model_validate(current_user)
 
 

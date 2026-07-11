@@ -63,6 +63,36 @@ async def get_messages(
             )
         )
 
+    # Batch-load all receipts for these messages
+    # receipt_map: message_id -> list of (user_id, status)
+    receipt_rows = await db.execute(
+        select(MessageReceipt.message_id, MessageReceipt.user_id, MessageReceipt.status)
+        .where(MessageReceipt.message_id.in_(message_ids))
+    )
+    receipt_map: dict[str, list[tuple[str, str]]] = {}
+    for r_msg_id, r_user_id, r_status in receipt_rows.all():
+        receipt_map.setdefault(r_msg_id, []).append((r_user_id, r_status))
+
+    # Fetch all non-sender member counts per conversation to detect "sent" state
+    member_rows = await db.execute(
+        select(ConversationMember.conversation_id, ConversationMember.user_id)
+        .where(ConversationMember.conversation_id == conversation_id)
+    )
+    # members per conversation excluding each message's sender is computed inline
+    all_members: set[str] = {r.user_id for r in member_rows.all()}
+
+    def _compute_status(msg_id: str, sender_id: str) -> str:
+        """Aggregate receipt status from the sender's perspective."""
+        other_members = all_members - {sender_id}
+        if not other_members:
+            return "read"  # solo conversation
+        receipts = {uid: st for uid, st in receipt_map.get(msg_id, [])}
+        if any(uid not in receipts for uid in other_members):
+            return "sent"
+        if all(receipts.get(uid) == "read" for uid in other_members):
+            return "read"
+        return "delivered"
+
     results: list[MessageOut] = []
     for row in message_rows:
         msg = row.Message
@@ -86,6 +116,7 @@ async def get_messages(
                 reply_to=reply_snippet,
                 attachments=att_map.get(msg.id, []),
                 created_at=msg.created_at,
+                receipt_status=_compute_status(msg.id, msg.sender_id),
             )
         )
 
@@ -148,6 +179,8 @@ async def send_message(
     )
     sender_name = sender_row.scalar_one()
 
+    # Return 'sent': message is persisted. The WS broadcast carries 'delivered'
+    # so the sender's client upgrades the status when that frame arrives.
     return MessageOut(
         id=msg.id,
         conversation_id=msg.conversation_id,
@@ -158,4 +191,5 @@ async def send_message(
         reply_to=None,
         attachments=[],
         created_at=msg.created_at,
+        receipt_status="sent",
     )
