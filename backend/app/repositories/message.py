@@ -1,7 +1,9 @@
-from sqlalchemy import select
+from datetime import datetime, timezone
+
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Attachment, Conversation, ConversationMember, Message, User
+from app.models import Attachment, Conversation, ConversationMember, Message, MessageReceipt, User
 from app.schemas.message import AttachmentOut, MessageOut, ReplySnippet
 
 
@@ -30,16 +32,14 @@ async def get_messages(
     if not message_rows:
         return []
 
-    # Collect all message ids for batch-fetching replies and attachments
     message_ids = [row.Message.id for row in message_rows]
 
-    # Batch-fetch reply-to messages (only the ones referenced)
     reply_ids = [
         row.Message.reply_to_id
         for row in message_rows
         if row.Message.reply_to_id is not None
     ]
-    reply_map: dict[str, tuple[str, str]] = {}  # id → (sender_name, content)
+    reply_map: dict[str, tuple[str, str]] = {}
     if reply_ids:
         reply_rows = await db.execute(
             select(Message, User.display_name.label("sender_name"))
@@ -49,7 +49,6 @@ async def get_messages(
         for rrow in reply_rows.all():
             reply_map[rrow.Message.id] = (rrow.sender_name, rrow.Message.content)
 
-    # Batch-fetch attachments for all messages
     att_rows = await db.execute(
         select(Attachment).where(Attachment.message_id.in_(message_ids))
     )
@@ -64,7 +63,6 @@ async def get_messages(
             )
         )
 
-    # Assemble results
     results: list[MessageOut] = []
     for row in message_rows:
         msg = row.Message
@@ -92,3 +90,72 @@ async def get_messages(
         )
 
     return results
+
+
+async def send_message(
+    db: AsyncSession, conversation_id: str, sender_id: str, content: str
+) -> MessageOut | None:
+    # Verify sender is a member
+    membership = await db.execute(
+        select(ConversationMember).where(
+            ConversationMember.conversation_id == conversation_id,
+            ConversationMember.user_id == sender_id,
+        )
+    )
+    if membership.scalars().first() is None:
+        return None
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Persist the message
+    msg = Message(
+        conversation_id=conversation_id,
+        sender_id=sender_id,
+        content=content,
+        message_type="text",
+        created_at=now,
+    )
+    db.add(msg)
+    await db.flush()  # populate msg.id
+
+    # Create 'delivered' receipts for every other member
+    other_members = await db.execute(
+        select(ConversationMember.user_id).where(
+            ConversationMember.conversation_id == conversation_id,
+            ConversationMember.user_id != sender_id,
+        )
+    )
+    for (member_id,) in other_members.all():
+        db.add(MessageReceipt(
+            message_id=msg.id,
+            user_id=member_id,
+            status="delivered",
+            updated_at=now,
+        ))
+
+    # Bump conversation.updated_at so the sidebar re-orders correctly
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(updated_at=now)
+    )
+
+    await db.flush()
+
+    # Fetch sender display_name for the response
+    sender_row = await db.execute(
+        select(User.display_name).where(User.id == sender_id)
+    )
+    sender_name = sender_row.scalar_one()
+
+    return MessageOut(
+        id=msg.id,
+        conversation_id=msg.conversation_id,
+        sender_id=msg.sender_id,
+        sender_name=sender_name,
+        content=msg.content,
+        message_type=msg.message_type,
+        reply_to=None,
+        attachments=[],
+        created_at=msg.created_at,
+    )
