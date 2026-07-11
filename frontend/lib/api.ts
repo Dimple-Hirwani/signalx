@@ -1,5 +1,6 @@
 import type { LoginResponse, User } from "@/types/auth";
 import type { Conversation } from "@/types/conversation";
+import type { Message } from "@/types/message";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -42,6 +43,11 @@ export const authApi = {
 export const conversationApi = {
   list: (token: string) =>
     apiFetch<Conversation[]>("/api/conversations", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  messages: (token: string, conversationId: string) =>
+    apiFetch<Message[]>(`/api/conversations/${conversationId}/messages`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
 };
